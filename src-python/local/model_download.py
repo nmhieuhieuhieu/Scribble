@@ -96,20 +96,6 @@ def _cache_bytes() -> int:
 
 def active_local_model() -> dict:
     """Describe the engine/model the current device will actually use."""
-    from local_stt import MLX_REPO, _active_tier, _mlx_available
-
-    if _active_tier() == "A" and _mlx_available():
-        return {
-            "engine": "mlx",
-            "model_id": MLX_REPO,
-            "display_name": "Nemotron 3.5 ASR (MLX 8-bit)",
-            "needs_download": True,
-            "cached": is_mlx_cached(),
-            "size_mb": round(MLX_TOTAL_BYTES / 1_000_000),
-            "multilingual": True,
-            "supported_languages": NEMOTRON_LANGS,
-        }
-    # Tier C (or MLX unavailable) → bundled sherpa, Vietnamese-only, always ready.
     return {
         "engine": "sherpa",
         "model_id": "sherpa-onnx-zipformer-vi-30M-int8-2026-02-09",
@@ -123,14 +109,8 @@ def active_local_model() -> dict:
 
 
 def download_state() -> dict:
-    """Current download status; progress is estimated live while downloading."""
-    with _lock:
-        st = dict(_state)
-    if st["status"] == "downloading":
-        st["progress"] = min(0.99, _cache_bytes() / MLX_TOTAL_BYTES)
-    elif st["status"] == "done":
-        st["progress"] = 1.0
-    return st
+    """Current download status."""
+    return {"status": "done", "progress": 1.0, "error": None}
 
 
 def _run_download():

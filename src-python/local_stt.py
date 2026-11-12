@@ -137,13 +137,13 @@ class StreamingZipformerEngine(LocalSTTEngine):
             num_threads=2,
             sample_rate=self.SAMPLE_RATE,
             feature_dim=80,
-            # Endpoint rules: close an utterance after 2.4s trailing silence,
-            # or 1.2s when the decoder already produced something decodable,
-            # or force-cut a 300-frame monologue. Tuned for meeting speech.
+            # Endpoint rules: close an utterance after 2.0s trailing silence,
+            # or 0.85s when the decoder already produced something decodable,
+            # or after 20s of continuous speech on the next breath pause (exact 1:1 match with Rust).
             enable_endpoint_detection=True,
-            rule1_min_trailing_silence=2.4,
-            rule2_min_trailing_silence=1.2,
-            rule3_min_utterance_length=300,
+            rule1_min_trailing_silence=2.0,
+            rule2_min_trailing_silence=0.85,
+            rule3_min_utterance_length=20.0,
             decoding_method="greedy_search",
         )
         self._stream = self._recognizer.create_stream()
@@ -156,6 +156,20 @@ class StreamingZipformerEngine(LocalSTTEngine):
 
     def is_endpoint(self) -> bool:
         return self._recognizer.is_endpoint(self._stream)
+
+    def tokens(self) -> tuple[list[str], list[float]]:
+        """Return decoded tokens and timestamps for the current stream."""
+        if self._recognizer is None or self._stream is None:
+            return [], []
+        try:
+            toks = self._recognizer.tokens(self._stream)
+            times = self._recognizer.timestamps(self._stream)
+            return toks or [], times or []
+        except Exception:
+            return [], []
+
+    def flush(self) -> None:
+        pass
 
     def partial_text(self, language: str = "vi") -> str:
         """Interim text for the live preview — post-processed like a final.
@@ -365,13 +379,14 @@ class LocalStreamingSTT:
     _FRAME_SAMPLES = 320            # 20ms @ 16kHz
     _FRAME_BYTES = _FRAME_SAMPLES * 2
     _SILENCE_RMS = 380.0           # below → treat frame as silence
-    # Partial results are pushed at most this often (interim UI preview).
-    _PARTIAL_INTERVAL_S = 0.8
+    # Partial results are pushed at most this often (interim UI preview, matching Rust: 250ms).
+    _PARTIAL_INTERVAL_S = 0.250
 
-    def __init__(self, language: str = "vi"):
+    def __init__(self, language: str = "vi", timeline = None):
         import queue
 
         self._language = language
+        self._timeline = timeline
         self._in: "queue.Queue" = queue.Queue()
         self._out: "queue.Queue" = queue.Queue()
         self._stopped = False
@@ -415,6 +430,16 @@ class LocalStreamingSTT:
         return hit
 
     def _run(self) -> None:
+        from speaker_tracker import LiveUtterance
+
+        u = LiveUtterance(
+            language=self._language,
+            timeline=self._timeline,
+            on_event=self._out.put,
+            clean_text_fn=_postprocess_local,
+            partial_interval=self._PARTIAL_INTERVAL_S,
+            sample_rate=self.SAMPLE_RATE,
+        )
         while True:
             item = self._in.get()
             if item is None:
@@ -425,29 +450,17 @@ class LocalStreamingSTT:
                 # was genuinely unavailable — nothing we can transcribe with.
                 continue
             try:
-                self._engine.accept(_pcm_int16_to_float32(pcm_bytes))
-                endpoint = self._engine.is_endpoint()
-                if endpoint:
-                    text = self._engine.finalize(self._language)
-                    if text:
-                        self._out.put({"text": text, "is_final": True})
-                    self._last_partial = ""
-                else:
-                    partial = self._engine.partial_text(self._language)
-                    now = time.time()
-                    if (
-                        partial
-                        and partial != self._last_partial
-                        and now - self._last_partial_at >= self._PARTIAL_INTERVAL_S
-                    ):
-                        self._last_partial = partial
-                        self._last_partial_at = now
-                        self._out.put({"text": partial, "is_final": False})
+                samples = _pcm_int16_to_float32(pcm_bytes)
+                batch_start = u.total_samples
+                u.total_samples += len(samples)
+                self._engine.accept(samples)
                 if is_final_flush:
-                    # Stream closing — emit whatever is decoded so nothing is lost.
-                    text = self._engine.finalize(self._language)
-                    if text:
-                        self._out.put({"text": text, "is_final": True})
+                    self._engine.flush()
+
+                if self._engine.is_endpoint() or is_final_flush:
+                    u.finish_utterance(self._engine)
+                else:
+                    u.update(self._engine, batch_start)
             except Exception as exc:
                 log.warning("FAILED: local realtime transcribe: %s", exc)
         self._out.put(None)

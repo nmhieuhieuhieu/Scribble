@@ -57,6 +57,13 @@ class Database:
         """Return a thread-local SQLite connection (creates one if needed)."""
         conn = getattr(self._local, "conn", None)
         if conn is None:
+            if not self._db_path:
+                from pathlib import Path
+                default_db = Path.home() / ".voicescribe_data" / "voicescribe.db"
+                if default_db.exists():
+                    self._db_path = str(default_db)
+                else:
+                    self._db_path = ":memory:"
             conn = sqlite3.connect(self._db_path, check_same_thread=False)
             conn.row_factory = sqlite3.Row
             # WAL mode: allows concurrent readers while writing

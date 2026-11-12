@@ -32,13 +32,19 @@ from pathlib import Path
 from uuid import uuid4
 
 from db import Database
+from audio_config import MERGE_MAX_GAP_MS
 from services.audio import find_ffmpeg
 from services.batch_diarizer import (
     chunk_speaker_map_from_timeline,
     diarize_fine_windows,
+    merge_consecutive_speaker_segments,
 )
 from services.job_registry import JobState, JobStatus, registry
-from services.vad_splitter import AudioChunk, split_into_chunks
+from services.vad_splitter import (
+    AudioChunk,
+    split_into_chunks,
+    split_into_speaker_chunks,
+)
 from stt import (
     HALLUCINATION_PATTERNS,
     SonioxJobError,
@@ -1292,6 +1298,27 @@ async def _run_nvidia_chunked_pipeline(
     chunks_dir.mkdir(parents=True, exist_ok=True)
 
     saved_chunks = {c["chunk_idx"]: c for c in db.get_upload_chunks(meeting_id)}
+
+    diarizer = None
+    try:
+        from main import diarizer as _diarizer
+        diarizer = _diarizer
+    except Exception:
+        pass
+
+    timeline = None
+    if diarizer is not None and not saved_chunks:
+        await registry.update(
+            job_id,
+            status=JobStatus.NORMALIZING,
+            progress=P_SPLIT,
+            message="Phân loại người nói & chia lượt...",
+        )
+        try:
+            timeline = await asyncio.to_thread(diarize_fine_windows, diarizer, wav_path)
+        except Exception as exc:
+            log.warning("[pipeline] diarize before split failed: %s", exc)
+
     if saved_chunks:
         # Resume mode: reuse the previously computed plan so chunk boundaries
         # stay consistent with already-saved transcripts.
@@ -1301,7 +1328,9 @@ async def _run_nvidia_chunked_pipeline(
         )
         chunks = _chunks_from_db_plan(saved_chunks, wav_path, chunks_dir)
     else:
-        chunks = await asyncio.to_thread(split_into_chunks, wav_path, chunks_dir)
+        chunks = await asyncio.to_thread(
+            split_into_speaker_chunks, wav_path, chunks_dir, timeline
+        )
         if not chunks:
             raise ValueError("Không phát hiện được giọng nói trong file")
         # Persist the plan so a future resume can use the same boundaries.
@@ -1365,8 +1394,13 @@ async def _run_nvidia_chunked_pipeline(
         log.warning("[pipeline] diarizer unavailable — single-speaker output")
 
     speaker_map: dict[int, int] = {}
-    if diarizer is not None:
-        timeline = await asyncio.to_thread(diarize_fine_windows, diarizer, wav_path)
+    for c in chunks:
+        if getattr(c, "speaker_id", None) is not None:
+            speaker_map[c.idx] = c.speaker_id
+
+    if not speaker_map and diarizer is not None:
+        if timeline is None:
+            timeline = await asyncio.to_thread(diarize_fine_windows, diarizer, wav_path)
         chunk_bounds = [(c.idx, int(c.start_ms), int(c.end_ms)) for c in chunks]
         speaker_map = chunk_speaker_map_from_timeline(timeline, chunk_bounds)
     if _is_cancelled(job):
@@ -1812,7 +1846,8 @@ def _build_transcript_parts(
 
         prev_tail = text[-120:]
 
-    return parts
+    # Merge consecutive turns of the same speaker (Decision B) preserving sub-chunk badges
+    return merge_consecutive_speaker_segments(parts, max_gap_ms=MERGE_MAX_GAP_MS)
 
 
 def _strip_overlap_prefix(prev_tail: str, current: str) -> str:

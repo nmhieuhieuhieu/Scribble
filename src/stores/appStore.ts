@@ -344,7 +344,7 @@ export const useAppStore = create<AppState>((set) => ({
         safeSetItem('scribble:customPrompt', v);
         set({ customPrompt: v });
     },
-    theme: (safeGetItem('scribble:theme', 'system') as ThemeMode) || 'system',
+    theme: (safeGetItem('scribble:theme', 'light') as ThemeMode) || 'light',
     setTheme: (v) => {
         safeSetItem('scribble:theme', v);
         applyTheme(v);

@@ -51,9 +51,20 @@ const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(function Aud
         seek: (sec: number) => {
             const audio = audioRef.current;
             if (!audio || !Number.isFinite(sec)) return;
-            audio.currentTime = Math.max(0, sec);
-            setCurrent(audio.currentTime);
-            void audio.play();
+            const targetTime = Math.max(0, sec);
+            if (audio.readyState < 1) {
+                const onLoaded = () => {
+                    audio.currentTime = targetTime;
+                    setCurrent(targetTime);
+                    void audio.play().catch(() => {});
+                    audio.removeEventListener('loadedmetadata', onLoaded);
+                };
+                audio.addEventListener('loadedmetadata', onLoaded);
+                return;
+            }
+            audio.currentTime = targetTime;
+            setCurrent(targetTime);
+            void audio.play().catch(() => {});
         },
     }), []);
 
@@ -61,7 +72,7 @@ const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(function Aud
         const audio = audioRef.current;
         if (!audio) return;
         if (audio.paused) {
-            void audio.play();
+            void audio.play().catch(() => {});
         } else {
             audio.pause();
         }
@@ -71,8 +82,10 @@ const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(function Aud
         const audio = audioRef.current;
         if (!audio) return;
         const next = Number(e.target.value);
-        audio.currentTime = next;
-        setCurrent(next);
+        if (Number.isFinite(next)) {
+            audio.currentTime = next;
+            setCurrent(next);
+        }
     };
 
     const progress = duration > 0 ? (current / duration) * 100 : 0;

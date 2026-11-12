@@ -3,9 +3,12 @@ Audio services — ffmpeg utilities, PCM conversion, media type helpers.
 """
 
 import os
+import struct
 import subprocess
 import tempfile
 from pathlib import Path
+
+import numpy as np
 
 from logger import get_logger
 
@@ -161,3 +164,92 @@ def safe_unlink(path: str) -> None:
             p.unlink()
     except Exception:
         pass
+
+
+def read_wav_floats(path: str | Path) -> tuple[int, np.ndarray]:
+    """Pure-Python + numpy WAV reader supporting both PCM and IEEE float.
+
+    Avoids importing scipy (which is excluded from PyInstaller builds).
+    Returns (sample_rate, samples_float32_mono).
+    """
+    p = Path(path)
+    with open(p, "rb") as f:
+        riff = f.read(12)
+        if len(riff) < 12 or riff[:4] != b"RIFF" or riff[8:12] != b"WAVE":
+            raise ValueError(f"Not a valid RIFF/WAVE file: {p}")
+
+        fmt_tag = None
+        channels = 1
+        sample_rate = 16000
+        bits_per_sample = 16
+        data_bytes = None
+
+        while True:
+            chunk_hdr = f.read(8)
+            if len(chunk_hdr) < 8:
+                break
+            chunk_id = chunk_hdr[:4]
+            chunk_size = struct.unpack("<I", chunk_hdr[4:])[0]
+
+            if chunk_id == b"fmt ":
+                fmt_data = f.read(chunk_size)
+                if len(fmt_data) >= 16:
+                    fmt_tag, channels, sample_rate, _, _, bits_per_sample = struct.unpack(
+                        "<HHIIHH", fmt_data[:16]
+                    )
+                    if fmt_tag == 0xFFFE and len(fmt_data) >= 26:
+                        fmt_tag = struct.unpack("<H", fmt_data[24:26])[0]
+            elif chunk_id == b"data":
+                data_bytes = f.read(chunk_size)
+                break
+            else:
+                f.seek(chunk_size, 1)
+
+            if chunk_size % 2 == 1:
+                f.seek(1, 1)
+
+    if data_bytes is None or fmt_tag is None:
+        raise ValueError(f"WAV data or fmt chunk missing in {p}")
+
+    if fmt_tag == 1:  # PCM
+        if bits_per_sample == 16:
+            samples = np.frombuffer(data_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+        elif bits_per_sample == 8:
+            samples = (np.frombuffer(data_bytes, dtype=np.uint8).astype(np.float32) - 128.0) / 128.0
+        elif bits_per_sample == 24:
+            raw = np.frombuffer(data_bytes, dtype=np.uint8)
+            n_samples = len(raw) // 3
+            raw = raw[: n_samples * 3].reshape(-1, 3)
+            int24 = (
+                raw[:, 0].astype(np.int32)
+                | (raw[:, 1].astype(np.int32) << 8)
+                | (raw[:, 2].astype(np.int32) << 16)
+            )
+            int24 = np.where(int24 >= 0x800000, int24 - 0x1000000, int24)
+            samples = int24.astype(np.float32) / 8388608.0
+        elif bits_per_sample == 32:
+            samples = np.frombuffer(data_bytes, dtype=np.int32).astype(np.float32) / 2147483648.0
+        else:
+            raise ValueError(f"Unsupported PCM bits per sample: {bits_per_sample}")
+    elif fmt_tag == 3:  # IEEE float
+        if bits_per_sample == 32:
+            samples = np.frombuffer(data_bytes, dtype=np.float32).copy()
+        elif bits_per_sample == 64:
+            samples = np.frombuffer(data_bytes, dtype=np.float64).astype(np.float32)
+        else:
+            raise ValueError(f"Unsupported float bits per sample: {bits_per_sample}")
+    else:
+        raise ValueError(f"Unsupported WAV format tag: {fmt_tag}")
+
+    if channels > 1:
+        samples = samples.reshape(-1, channels).mean(axis=1)
+
+    return sample_rate, samples
+
+
+def wav_duration_ms(path: str | Path) -> int:
+    """Return total duration of a WAV file in milliseconds without scipy."""
+    sr, samples = read_wav_floats(path)
+    if sr <= 0:
+        return 0
+    return int(len(samples) * 1000 / sr)

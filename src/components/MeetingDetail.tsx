@@ -117,8 +117,17 @@ function toTimeString(value: unknown): string {
     return text || '0';
 }
 
-function toTimeNumber(value: string): number {
-    const n = Number(value);
+function toTimeNumber(value: unknown): number {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+    if (typeof value !== 'string') return 0;
+    const str = value.trim();
+    if (!str) return 0;
+    if (str.includes(':')) {
+        const parts = str.split(':').map((p) => parseFloat(p) || 0);
+        if (parts.length === 2) return parts[0] * 60 + parts[1];
+        if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    }
+    const n = parseFloat(str);
     return Number.isFinite(n) ? n : 0;
 }
 
@@ -1587,7 +1596,7 @@ export function MeetingDetail() {
                         <div className="welcome-icon">
                             <IconMic size={28} strokeWidth={1.35} />
                         </div>
-                        <div className="welcome-title">{lang === 'vi' ? 'Chào mừng đến Scribble!' : 'Welcome to Scribble!'}</div>
+                        <div className="welcome-title">{lang === 'vi' ? 'Chào mừng đến TPBank!' : 'Welcome to TPBank!'}</div>
                         <div className="welcome-sub">{lang === 'vi' ? 'Nhấn nút Record để bắt đầu phiên dịch trực tiếp' : 'Press Record to start live transcription'}</div>
                     </div>
                 ) : transcriptParts.length === 0 && recording && !hasInterim ? (

@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { useAppStore, applyTheme, resolveTheme } from './stores/appStore';
+import { useAppStore, applyTheme } from './stores/appStore';
 import { MeetingList } from './components/MeetingList';
 import { MeetingDetail } from './components/MeetingDetail';
 import { RecordingBar } from './components/RecordingBar';
 import { SettingsPanel } from './components/SettingsPanel';
+import { GalaxySoundwaveBg } from './components/GalaxySoundwaveBg';
 import { ToastProvider } from './components/Toast';
 import { UpdateChecker } from './components/UpdateChecker';
 import { SIDECAR_HTTP_BASES } from './lib/sidecar';
 import { getSettings } from './lib/api';
 import './index.css';
-import { IconMic, IconMoon, IconSettings, IconSun } from './components/icons/scribble-icons';
+import { IconGear, IconSliders, IconTPBank } from './components/icons/scribble-icons';
 
 const queryClient = new QueryClient();
 const SIDECAR_BASES = SIDECAR_HTTP_BASES;
@@ -66,7 +67,7 @@ function handleTopnavMouseDown(e: React.MouseEvent<HTMLElement>) {
 }
 
 function AppInner() {
-  const { currentView, settingsOpen, setSettingsOpen, lang, setLang, recording, setBackendOnline, setNetworkOnline, networkOnline, setAiConfigured, theme, setTheme } = useAppStore();
+  const { currentView, settingsOpen, setSettingsOpen, lang, recording, setBackendOnline, setNetworkOnline, networkOnline, setAiConfigured } = useAppStore();
   const [backendStatus, setBackendStatusLocal] = useState<'online' | 'offline'>('offline');
   // Mirror local backend state into the global store so unrelated components
   // (MeetingList action buttons, RecordingBar) can gate themselves without
@@ -80,16 +81,10 @@ function AppInner() {
   const showRecBar = currentView === 'recording' || currentView === 'detail';
   const isOffline = backendStatus !== 'online';
 
-  // Theme: apply on boot, re-apply when the mode changes, and follow the
-  // OS when mode === 'system'.
+  // Always apply default TPBank light theme on boot
   useEffect(() => {
-    applyTheme(theme);
-    if (theme !== 'system' || typeof window === 'undefined' || !window.matchMedia) return;
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const onChange = () => applyTheme('system');
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, [theme]);
+    applyTheme('light');
+  }, []);
 
   // Chip reflects TWO independent signals: the local sidecar (backendStatus)
   // AND internet reachability (networkOnline). "Ready" must mean both are up —
@@ -212,6 +207,7 @@ function AppInner() {
       <QueryClientProvider client={queryClient}>
         <div className={`app ${isOffline ? 'app--offline' : ''} ${IS_MACOS ? 'app--macos' : ''}`}>
           <main className="main">
+            <GalaxySoundwaveBg />
             {/* App shell stays interactive (scroll meeting list, open
                 settings) while sidecar warms up. Buttons that need the
                 backend disable themselves via the `disabled={isOffline}`
@@ -223,8 +219,8 @@ function AppInner() {
             <header className="topnav" data-tauri-drag-region onMouseDown={handleTopnavMouseDown}>
               <div className="topnav-left" data-tauri-drag-region>
                 <span className="brand" data-tauri-drag-region>
-                  <IconMic size={18} className="brand-icon" strokeWidth={2.25} />
-                  Scribble
+                  <IconTPBank size={24} className="brand-tpb-icon" />
+                  <span className="brand-tpb">TPBank Voicebot</span>
                   {appVersion && <span className="app-version">v{appVersion}</span>}
                 </span>
               </div>
@@ -238,34 +234,25 @@ function AppInner() {
                   <span className={`status-dot ${chipState}`} />
                   <span>{backendLabel}</span>
                 </div>
-                {/* Language + Settings stay enabled during startup — users
-                    often want to configure API keys / language while waiting,
-                    and neither needs the backend running. */}
-                <button className="lang-toggle" onClick={() => setLang(lang === 'vi' ? 'en' : 'vi')}>
-                  {lang === 'vi' ? 'VI' : 'EN'}
-                </button>
+                {/* Settings buttons */}
                 <button
                   className="icon-btn"
-                  onClick={() => setTheme(resolveTheme(theme) === 'dark' ? 'light' : 'dark')}
-                  title={lang === 'vi'
-                    ? `Giao diện: ${theme === 'system' ? 'theo hệ thống' : theme === 'dark' ? 'tối' : 'sáng'} — bấm để đổi`
-                    : `Theme: ${theme} — click to toggle`}
-                  aria-label={lang === 'vi' ? 'Đổi giao diện sáng/tối' : 'Toggle light/dark theme'}
+                  onClick={() => setSettingsOpen(true)}
+                  disabled={recording}
+                  title={recording ? (lang === 'vi' ? 'Đang ghi âm — dừng ghi để chỉnh cấu hình' : 'Recording — stop to change settings') : (lang === 'vi' ? 'Cài đặt' : 'Settings')}
+                  aria-label="Settings"
                 >
-                  <span className="t-icon-swap" data-state={resolveTheme(theme) === 'dark' ? 'b' : 'a'}>
-                    <span className="t-icon" data-icon="a"><IconMoon size={18} /></span>
-                    <span className="t-icon" data-icon="b"><IconSun size={18} /></span>
-                  </span>
+                  <IconGear size={16} />
                 </button>
                 <button
                   className="icon-btn"
                   id="btnSettings"
                   onClick={() => setSettingsOpen(true)}
                   disabled={recording}
-                  title={recording ? (lang === 'vi' ? 'Đang ghi âm — dừng ghi để chỉnh cấu hình' : 'Recording — stop to change settings') : (lang === 'vi' ? 'Cài đặt' : 'Settings')}
-                  aria-label="Settings"
+                  title={recording ? (lang === 'vi' ? 'Đang ghi âm — dừng ghi để chỉnh cấu hình' : 'Recording — stop to change settings') : (lang === 'vi' ? 'Tùy chỉnh' : 'Customize')}
+                  aria-label="Customize"
                 >
-                  <IconSettings size={18} />
+                  <IconSliders size={16} />
                 </button>
               </div>
             </header>

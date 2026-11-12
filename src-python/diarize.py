@@ -12,6 +12,7 @@ import os
 import subprocess
 import threading
 import time
+from typing import Optional
 
 import numpy as np
 from logger import get_logger
@@ -50,8 +51,8 @@ def resample_fft(samples: np.ndarray, num: int) -> np.ndarray:
 #   different-speaker:    p50 0.236 | p90 0.344 | p95 0.376 | max 0.510
 # (Upload uses a separate cosine-DISTANCE threshold in batch_diarizer,
 # NOT these.) Full analysis: docs/reports/calibration-2026-10-09-hynt-resnet34-tts.md
-MATCH_THRESHOLD        = float(os.getenv("DIARIZE_MATCH_THRESHOLD",        "0.42"))
-STRONG_MATCH_THRESHOLD = float(os.getenv("DIARIZE_STRONG_MATCH_THRESHOLD", "0.65"))
+MATCH_THRESHOLD        = float(os.getenv("DIARIZE_MATCH_THRESHOLD",        "0.50"))
+STRONG_MATCH_THRESHOLD = float(os.getenv("DIARIZE_STRONG_MATCH_THRESHOLD", "0.70"))
 MAX_SPEAKERS           = int(os.getenv("DIARIZE_MAX_SPEAKERS",             "8"))
 SWITCH_CONFIRM_HITS    = int(os.getenv("DIARIZE_SWITCH_CONFIRM_HITS",      "2"))
 NEW_SPEAKER_CONFIRM_HITS = int(os.getenv("DIARIZE_NEW_SPEAKER_CONFIRM_HITS", "3"))
@@ -67,7 +68,7 @@ EMA_UPDATE_MIN_SIM     = float(os.getenv("DIARIZE_EMA_UPDATE_MIN_SIM",     "0.50
 # 1.5s for more robust embeddings. Realtime WS handlers in
 # main.py import this; segments shorter than this keep the previous speaker.
 # bytes = 16000 samples/s * 2 bytes/sample * seconds.
-DIARIZE_MIN_SECONDS    = float(os.getenv("DIARIZE_MIN_SECONDS", "1.5"))
+from audio_config import DIARIZE_MIN_SECONDS, NEW_SPEAKER_MIN_SECONDS
 DIARIZE_MIN_BYTES      = int(16000 * 2 * DIARIZE_MIN_SECONDS)
 
 # Embedding model selection.
@@ -110,8 +111,7 @@ SWITCH_STRONG_SIM                   = 0.75
 SWITCH_STRONG_GAP                   = 0.08
 INSTANT_SWITCH_SIM                  = 0.80
 INSTANT_SWITCH_GAP                  = 0.15
-# New speaker debounce
-NEW_SPEAKER_MIN_SECONDS             = 1.5
+# New speaker debounce (imported from audio_config)
 SAME_ZONE_WEAK_PITCH_DIFF_FEMALE    = 40.0
 SAME_ZONE_WEAK_PITCH_DIFF_MALE      = 90.0
 # Calibrated 2026-10-09: consecutive same-speaker 2s windows on real VI audio
@@ -518,6 +518,11 @@ class SpeakerDiarizer:
     @staticmethod
     def _load_audio_numpy(audio_path: str) -> tuple:
         """Load audio as float32 numpy array. Returns (samples_1d, sample_rate)."""
+        try:
+            from services.audio import read_wav_floats
+            return read_wav_floats(audio_path)[::-1]  # returns (samples, sr)
+        except Exception:
+            pass
         import wave
         try:
             with wave.open(audio_path, "rb") as wf:
@@ -574,6 +579,29 @@ class SpeakerDiarizer:
                 os.unlink(wav_path)
             except Exception:
                 pass
+
+    def extract_embedding(self, samples: np.ndarray) -> Optional[np.ndarray]:
+        """Extract L2-normalized embedding for 16kHz float32 audio.
+
+        Used by SpeakerTracker sliding window tracking.
+        """
+        with self._lock:
+            if not self._model_loaded:
+                self._init_model()
+            if self._session is None or len(samples) < 320:
+                return None
+            try:
+                fbank = self._compute_fbank(samples, sr=16000)
+                fbank_input = fbank[np.newaxis, :, :]
+                outputs = self._session.run([self._out_name], {self._in_name: fbank_input})
+                emb = outputs[0].flatten().astype(np.float32)
+                norm = float(np.linalg.norm(emb))
+                if norm >= 1e-8:
+                    emb = emb / norm
+                return emb
+            except Exception as e:
+                _log.warning("[diarize] extract_embedding failed: %s", e)
+                return None
 
     def _identify_embedding(self, wav_path: str = None, samples: np.ndarray = None,
                            update_profiles: bool = True) -> dict:

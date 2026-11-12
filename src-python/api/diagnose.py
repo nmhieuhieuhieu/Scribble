@@ -205,12 +205,10 @@ async def diagnose(lang: str = "vi"):
     results = {"stt": {"status": "unknown", "message": ""}, "llm": {"status": "unknown", "message": ""}}
     loop = asyncio.get_event_loop()
 
-    stt_provider = db.get_setting("stt_provider") or "nvidia"
-    stt_is_local = stt_provider == "local"
+    stt_provider = db.get_setting("stt_provider") or "local"
 
     # Local STT runs entirely on-device — no API key, no network. Its readiness
-    # depends only on whether the model is available (bundled sherpa = always;
-    # nemotron MLX = needs prior download). Compute once and reuse below.
+    # depends only on whether the model is available (bundled sherpa = always).
     def _local_stt_block() -> dict:
         try:
             from local.model_download import active_local_model
@@ -222,73 +220,18 @@ async def diagnose(lang: str = "vi"):
         return {"status": "ok", "message": t("local_stt_ready", lang)}
 
     # ── Offline short-circuit ──────────────────────────────────────────────
-    # Probe the network FIRST (force-fresh via _do_probe, not cached). If the
-    # machine is offline, the cloud provider checks below would just raise a raw
-    # DNS error. Local STT still works offline, so only flag it when it actually
-    # needs a (network-dependent) model download; LLM always needs network.
     await _do_probe()
     if _network_cache["online"] is False:
         offline_msg = t("network_offline", lang)
         log.info("STATUS: diagnose short-circuit — network offline")
         return {
-            "stt": _local_stt_block() if stt_is_local
-            else {"status": "error", "message": offline_msg, "offline": True},
+            "stt": _local_stt_block(),
             "llm": {"status": "error", "message": offline_msg, "offline": True},
-            "backend": stt_provider,
+            "backend": "local",
             "network": {"online": False},
         }
 
-    if stt_is_local:
-        results["stt"] = _local_stt_block()
-    elif stt_provider == "soniox":
-        soniox_key = db.get_setting("soniox_api_key") or os.getenv("SONIOX_API_KEY", "")
-        if not soniox_key:
-            results["stt"] = {"status": "warning", "message": t("soniox_key_missing", lang)}
-        else:
-            def _test_soniox():
-                from soniox import SonioxClient
-                client = SonioxClient(api_key=soniox_key)
-                client.models.list()
-
-            try:
-                await loop.run_in_executor(None, _test_soniox)
-                results["stt"] = {"status": "ok", "message": t("soniox_connected", lang)}
-            except Exception as e:
-                if _is_network_error(e):
-                    results["stt"] = {"status": "error", "message": t("network_offline", lang), "offline": True}
-                else:
-                    results["stt"] = {"status": "error", "message": f"{t('soniox_connect_fail', lang)}: {str(e)[:80]}"}
-    else:
-        nvidia_key = db.get_setting("nvidia_api_key") or os.getenv("NVIDIA_API_KEY", "")
-        if not nvidia_key:
-            results["stt"] = {"status": "warning", "message": t("nvidia_key_missing", lang)}
-        else:
-            def _test_riva():
-                from stt import _get_riva_asr, _reset_riva_asr, get_nvidia_model
-                from concurrent.futures import ThreadPoolExecutor
-                stt_lang_diag = db.get_setting("stt_language") or "vi"
-                from stt import get_language_code
-                lang_code = get_language_code(stt_lang_diag)
-                model = get_nvidia_model(lang_code)
-                _reset_riva_asr(model["function_id"])
-                executor = ThreadPoolExecutor(max_workers=1)
-                future = executor.submit(_get_riva_asr, nvidia_key, model["function_id"])
-                try:
-                    future.result(timeout=10)
-                finally:
-                    executor.shutdown(wait=False, cancel_futures=True)
-
-            try:
-                await loop.run_in_executor(None, _test_riva)
-                results["stt"] = {"status": "ok", "message": t("nvidia_connected", lang)}
-            except Exception as e:
-                err_str = str(e)
-                if _is_network_error(e):
-                    results["stt"] = {"status": "error", "message": t("network_offline", lang), "offline": True}
-                elif "TimeoutError" in type(e).__name__ or "timed out" in err_str.lower():
-                    results["stt"] = {"status": "error", "message": t("nvidia_connect_fail", lang) + ": Connection timed out (10s)"}
-                else:
-                    results["stt"] = {"status": "error", "message": f"{t('nvidia_connect_fail', lang)}: {err_str[:80]}"}
+    results["stt"] = _local_stt_block()
 
     llm_key = db.get_setting("llm_api_key") or os.getenv("LLM_API_KEY", "")
     llm_provider = db.get_setting("llm_provider") or "openai"

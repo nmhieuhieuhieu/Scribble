@@ -54,9 +54,17 @@ async def transcribe_diarize(audio: UploadFile = File(...)):
 
         loop = asyncio.get_running_loop()
         stt_lang = db.get_setting("stt_language") or "vi"
-        nvidia_key = db.get_setting("nvidia_api_key") or os.environ.get("NVIDIA_API_KEY", "")
-        riva_lang = get_language_code(stt_lang)
-        transcribe_task = loop.run_in_executor(None, transcribe_nvidia, tmp_path, nvidia_key, riva_lang)
+        stt_provider = (db.get_setting("stt_provider") or "local").lower().strip()
+
+        if stt_provider == "nvidia":
+            nvidia_key = db.get_setting("nvidia_api_key") or os.environ.get("NVIDIA_API_KEY", "")
+            riva_lang = get_language_code(stt_lang)
+            transcribe_task = loop.run_in_executor(None, transcribe_nvidia, tmp_path, nvidia_key, riva_lang)
+        else:
+            # Default to local offline sherpa-onnx
+            from local_stt import transcribe_local_file
+            transcribe_task = loop.run_in_executor(None, transcribe_local_file, tmp_path, stt_lang)
+
         diarize_task = loop.run_in_executor(None, _diarizer.identify_speaker, tmp_path)
 
         results = await asyncio.gather(transcribe_task, diarize_task, return_exceptions=True)

@@ -301,8 +301,8 @@ export function RecordingBar() {
                     if (!status.cached && status.status !== 'done') {
                         showToast(
                             lang === 'vi'
-                                ? 'Model nhận diện offline chưa sẵn sàng. Vào Cài đặt → Giọng nói để tải model, hoặc chuyển sang Soniox.'
-                                : 'The offline speech model is not ready. Open Settings → Speech to download it, or switch to Soniox.',
+                                ? 'Model nhận diện offline chưa sẵn sàng.'
+                                : 'The offline speech model is not ready.',
                             'error'
                         );
                         useAppStore.getState().setSettingsOpen(true);

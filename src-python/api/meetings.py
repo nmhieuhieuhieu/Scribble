@@ -7,8 +7,8 @@ import tempfile
 import wave as _wave
 from pathlib import Path
 
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, FileResponse, Response
+from fastapi import APIRouter, Request, Response
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from starlette.background import BackgroundTask
 
 from db import Database
@@ -131,18 +131,111 @@ def _resolve_audio_source(meeting_id: int) -> Path | None:
     return source_path
 
 
-@router.get("/meetings/{meeting_id}/audio/stream")
-async def stream_meeting_audio(meeting_id: int):
-    """In-app playback. Web-playable containers (mp3/m4a/wav/webm/mp4) are
-    served directly with HTTP Range support so the <audio> element can seek
-    without a full re-fetch. Raw PCM has no container, so it is wrapped to a
-    cached WAV once (stdlib `wave`, no ffmpeg).
+def send_range_audio_response(
+    source_path: Path,
+    range_header: str | None,
+    media_type: str,
+) -> Response:
+    """Stream an audio file with HTTP 206 Partial Content / Range support for seeking."""
+    try:
+        file_size = source_path.stat().st_size
+    except OSError:
+        return JSONResponse({"error": "Audio file unreadable"}, status_code=500)
 
-    Note: webm/opus plays in WebView2 (Windows) but NOT WKWebView (macOS) —
-    served as-is for now (uploads are m4a/mp3 and play everywhere)."""
+    if file_size == 0:
+        return Response(
+            content=b"",
+            status_code=200,
+            headers={
+                "Accept-Ranges": "bytes",
+                "Content-Length": "0",
+                "Content-Type": media_type,
+            },
+        )
+
+    if not range_header or not range_header.startswith("bytes="):
+        def full_file_iterator():
+            with open(source_path, "rb") as f:
+                while chunk := f.read(64 * 1024):
+                    yield chunk
+
+        headers = {
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(file_size),
+            "Content-Type": media_type,
+            "Content-Range": f"bytes 0-{file_size - 1}/{file_size}",
+        }
+        return StreamingResponse(
+            full_file_iterator(),
+            status_code=200,
+            headers=headers,
+            media_type=media_type,
+        )
+
+    # Parse Range: bytes=start-end (RFC 7233 / RFC 9110)
+    raw_range = range_header.replace("bytes=", "").strip()
+    try:
+        parts = raw_range.split("-")
+        if parts[0] == "":
+            suffix_len = int(parts[1])
+            start = max(0, file_size - suffix_len)
+            end = file_size - 1
+        elif parts[1] == "":
+            start = int(parts[0])
+            end = file_size - 1
+        else:
+            start = int(parts[0])
+            end = min(int(parts[1]), file_size - 1)
+    except (ValueError, IndexError):
+        return Response(
+            status_code=416,
+            headers={"Content-Range": f"bytes */{file_size}", "Accept-Ranges": "bytes"},
+        )
+
+    if start >= file_size or start > end:
+        return Response(
+            status_code=416,
+            headers={"Content-Range": f"bytes */{file_size}", "Accept-Ranges": "bytes"},
+        )
+
+    content_length = end - start + 1
+
+    def range_iterator():
+        with open(source_path, "rb") as f:
+            f.seek(start)
+            remaining = content_length
+            while remaining > 0:
+                chunk_to_read = min(64 * 1024, remaining)
+                data = f.read(chunk_to_read)
+                if not data:
+                    break
+                remaining -= len(data)
+                yield data
+
+    headers = {
+        "Content-Range": f"bytes {start}-{end}/{file_size}",
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(content_length),
+        "Content-Type": media_type,
+    }
+    return StreamingResponse(
+        range_iterator(),
+        status_code=206,
+        headers=headers,
+        media_type=media_type,
+    )
+
+
+@router.get("/meetings/{meeting_id}/audio/stream")
+async def stream_meeting_audio(meeting_id: int, request: Request):
+    """In-app playback with full HTTP Range (206 Partial Content) support so the
+    <audio> element can seek without jumping back to 0:00."""
     source_path = _resolve_audio_source(meeting_id)
     if source_path is None:
         return JSONResponse({"error": "Audio not found"}, status_code=404)
+
+    range_header = request.headers.get("range")
+
     if source_path.suffix.lower() == ".pcm":
         cache_dir = _voicescribe_data_dir() / "audio" / "cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
@@ -155,11 +248,13 @@ async def stream_meeting_audio(meeting_id: int):
                     wf.setsampwidth(2)
                     wf.setframerate(16000)
                     wf.writeframes(pcm_data)
-            return FileResponse(str(wav), media_type="audio/wav")
+            return send_range_audio_response(wav, range_header, "audio/wav")
         except Exception as e:
             log.warning("[meetings] stream pcm->wav failed: %s", e)
             return JSONResponse({"error": "Cannot prepare audio"}, status_code=500)
-    return FileResponse(str(source_path), media_type=audio_media_type(source_path.suffix))
+
+    media_type = audio_media_type(source_path.suffix)
+    return send_range_audio_response(source_path, range_header, media_type)
 
 
 @router.get("/meetings/{meeting_id}/audio")

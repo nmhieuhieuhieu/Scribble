@@ -43,7 +43,7 @@ def test_calibrated_defaults_for_hynt_resnet():
     assert diarize.NEW_SPEAKER_SELF_SIM == 0.55
     import services.batch_diarizer as bd
     importlib.reload(bd)
-    assert bd.DEFAULT_DISTANCE_THRESHOLD == 0.45
+    assert bd.DEFAULT_DISTANCE_THRESHOLD == 0.58
 
 
 def test_thresholds_env_overridable(monkeypatch):

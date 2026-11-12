@@ -17,6 +17,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../stores/appStore';
 import { getSettings, detectOfflineAfterFailure, looksLikeNetworkError } from '../lib/api';
+import { IS_TAURI, SIDECAR_HTTP_BASES, sidecarUrl } from '../lib/sidecar';
 import { STT_LANGUAGES } from '../lib/language-options';
 import {
     cancelAudioUpload,
@@ -133,6 +134,8 @@ export function UploadAudioModal({ open, onClose, onMeetingReady }: Props) {
     const [duplicateMeetingId, setDuplicateMeetingId] = useState<number | null>(null);
     const [errorMessage, setErrorMessage] = useState<string>('');
 
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const [webFile, setWebFile] = useState<File | null>(null);
     const uploadIdRef = useRef<string | null>(null);
     const jobIdRef = useRef<string | null>(null);
     const sseAbortRef = useRef<AbortController | null>(null);
@@ -142,6 +145,8 @@ export function UploadAudioModal({ open, onClose, onMeetingReady }: Props) {
     const resetAll = () => {
         setStep('pick');
         setFilePath(null);
+        setWebFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
         setTitle('');
         setGenerateSummary(false);
         setBytesSent(0);
@@ -203,7 +208,7 @@ export function UploadAudioModal({ open, onClose, onMeetingReady }: Props) {
     const tr = lang === 'vi'
         ? {
               title: 'Upload file ghi âm',
-              subtitle: 'Chọn file audio/video — Scribble sẽ tự phiên âm và tạo biên bản.',
+              subtitle: 'Chọn file audio/video — TPBank sẽ tự phiên âm và tạo biên bản.',
               pickFile: 'Chọn file…',
               pickedFile: 'File đã chọn',
               titleLabel: 'Tiêu đề cuộc họp',
@@ -240,7 +245,7 @@ export function UploadAudioModal({ open, onClose, onMeetingReady }: Props) {
           }
         : {
               title: 'Upload audio file',
-              subtitle: 'Pick a local audio or video — Scribble transcribes it and generates minutes.',
+              subtitle: 'Pick a local audio or video — TPBank transcribes it and generates minutes.',
               pickFile: 'Choose file…',
               pickedFile: 'Selected file',
               titleLabel: 'Meeting title',
@@ -277,16 +282,29 @@ export function UploadAudioModal({ open, onClose, onMeetingReady }: Props) {
           };
 
     const handlePick = async () => {
+        if (!IS_TAURI) {
+            fileInputRef.current?.click();
+            return;
+        }
         try {
             const picked = await pickAudioFile();
             if (!picked) return;
             const base = basenameFromPath(picked);
             setFilePath(picked);
+            setWebFile(null);
             if (!title) setTitle(stemFromBasename(base));
         } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            showToast(msg || tr.error, 'error');
+            fileInputRef.current?.click();
         }
+    };
+
+    const handleWebFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setWebFile(file);
+        setFilePath(file.name);
+        setTotalBytes(file.size);
+        if (!title) setTitle(stemFromBasename(file.name));
     };
 
     const handleStart = async () => {
@@ -316,19 +334,56 @@ export function UploadAudioModal({ open, onClose, onMeetingReady }: Props) {
 
         let result: UploadResult;
         try {
-            result = await uploadAudio(
-                {
-                    filePath,
-                    title: title.trim() || undefined,
-                    language,
-                    generateSummary,
-                },
-                (p: UploadProgressPayload) => {
-                    uploadIdRef.current = p.upload_id;
-                    setBytesSent(p.bytes_sent);
-                    setTotalBytes(p.total_bytes);
-                },
-            );
+            if (webFile) {
+                const formData = new FormData();
+                formData.append('audio', webFile);
+                if (title.trim()) formData.append('title', title.trim());
+                formData.append('language', language);
+                formData.append('generate_summary', String(generateSummary));
+
+                result = await new Promise<UploadResult>((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', sidecarUrl(SIDECAR_HTTP_BASES[0], '/meetings/upload-audio'));
+                    xhr.upload.onprogress = (e) => {
+                        if (e.lengthComputable) {
+                            setBytesSent(e.loaded);
+                            setTotalBytes(e.total);
+                        }
+                    };
+                    xhr.onload = () => {
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            try {
+                                resolve(JSON.parse(xhr.responseText));
+                            } catch (err) {
+                                reject(err);
+                            }
+                        } else {
+                            try {
+                                const parsed = JSON.parse(xhr.responseText);
+                                reject(new Error(parsed?.detail || parsed?.error || `HTTP ${xhr.status}`));
+                            } catch {
+                                reject(new Error(xhr.responseText || `HTTP ${xhr.status}`));
+                            }
+                        }
+                    };
+                    xhr.onerror = () => reject(new Error('Network error during upload'));
+                    xhr.send(formData);
+                });
+            } else {
+                result = await uploadAudio(
+                    {
+                        filePath,
+                        title: title.trim() || undefined,
+                        language,
+                        generateSummary,
+                    },
+                    (p: UploadProgressPayload) => {
+                        uploadIdRef.current = p.upload_id;
+                        setBytesSent(p.bytes_sent);
+                        setTotalBytes(p.total_bytes);
+                    },
+                );
+            }
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             if (cancelledRef.current) {
@@ -470,6 +525,13 @@ export function UploadAudioModal({ open, onClose, onMeetingReady }: Props) {
                     <div className="upload-modal-body">
                         <p className="upload-modal-subtitle">{tr.subtitle}</p>
 
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleWebFileChange}
+                            accept="audio/*,video/*,.mp3,.wav,.m4a,.mp4,.webm,.mkv,.aac,.ogg,.flac"
+                            style={{ display: 'none' }}
+                        />
                         <button className="upload-file-picker" onClick={handlePick} type="button">
                             <IconUpload size={20} />
                             <span>{filePath ? basenameFromPath(filePath) : tr.pickFile}</span>

@@ -350,9 +350,8 @@ async def nvidia_stream_ws(websocket: WebSocket):
     result_queue = asyncio.Queue()
     last_final_chunk_id = ""
 
-    # Audio buffer for speaker diarization (min-bytes from diarize module)
-    diarize_buf = bytearray()
-    diarize_buf_lock = threading.Lock()
+    from speaker_tracker import SpeakerTracker
+    nvidia_tracker = SpeakerTracker(embed_fn=diarizer.extract_embedding)
 
     def _read_results():
         for result in streamer.results():
@@ -446,22 +445,12 @@ async def nvidia_stream_ws(websocket: WebSocket):
                     await websocket.send_json(msg)
                     _accumulate_part(msg["text"], msg["speaker"], msg["speaker_id"], current_chunk_id, False)
                 else:
-                    # Diarize on final result
-                    with diarize_buf_lock:
-                        buf_bytes = bytes(diarize_buf)
-                        diarize_buf.clear()
-                    if len(buf_bytes) >= DIARIZE_MIN_BYTES:
-                        try:
-                            samples = np.frombuffer(buf_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-                            speaker_info = await loop.run_in_executor(
-                                None, diarizer.identify_speaker_from_samples, samples, 16000
-                            )
-                            msg["speaker"] = speaker_info.get("speaker", last_speaker)
-                            msg["speaker_id"] = speaker_info.get("speaker_id", last_speaker_id)
-                            last_speaker = msg["speaker"]
-                            last_speaker_id = msg["speaker_id"]
-                        except Exception as e:
-                            log.warning("[ws:nvidia] diarize error: %s", e)
+                    curr_sample = nvidia_tracker.buf_start + len(nvidia_tracker.buf)
+                    spk_id = nvidia_tracker.timeline.speaker_at(curr_sample)
+                    msg["speaker"] = f"Speaker {spk_id + 1}"
+                    msg["speaker_id"] = spk_id
+                    last_speaker = msg["speaker"]
+                    last_speaker_id = msg["speaker_id"]
 
                     # Send transcript immediately (don't wait for translation)
                     await websocket.send_json(msg)
@@ -522,9 +511,8 @@ async def nvidia_stream_ws(websocket: WebSocket):
                 break
             if "bytes" in data:
                 audio_bytes = data["bytes"]
+                nvidia_tracker.feed(audio_bytes)
                 streamer.feed_audio(audio_bytes)
-                with diarize_buf_lock:
-                    diarize_buf.extend(audio_bytes)
                 if archive_fh is not None:
                     try:
                         archive_fh.write(audio_bytes)
@@ -545,6 +533,7 @@ async def nvidia_stream_ws(websocket: WebSocket):
     except WebSocketDisconnect:
         pass
     finally:
+        nvidia_tracker.finish()
         streamer.stop()
         result_thread.join(timeout=5)
         
@@ -628,7 +617,9 @@ async def local_stream_ws(websocket: WebSocket):
         await websocket.close()
         return
 
-    streamer = LocalStreamingSTT(stt_lang)
+    from speaker_tracker import SpeakerTracker
+    tracker = SpeakerTracker(embed_fn=diarizer.extract_embedding)
+    streamer = LocalStreamingSTT(stt_lang, timeline=tracker.timeline)
     loop = asyncio.get_running_loop()
     try:
         await loop.run_in_executor(None, streamer.start)
@@ -640,8 +631,6 @@ async def local_stream_ws(websocket: WebSocket):
 
     result_queue = asyncio.Queue()
     last_final_chunk_id = ""
-    diarize_buf = bytearray()
-    diarize_buf_lock = threading.Lock()
 
     def _read_results():
         for result in streamer.results():
@@ -713,8 +702,8 @@ async def local_stream_ws(websocket: WebSocket):
                             await websocket.send_json({
                                 "text": result["text"],
                                 "is_final": False,
-                                "speaker": last_speaker,
-                                "speaker_id": last_speaker_id,
+                                "speaker": result.get("speaker", last_speaker),
+                                "speaker_id": result.get("speaker_id", last_speaker_id),
                             })
                         except Exception:
                             pass
@@ -723,30 +712,23 @@ async def local_stream_ws(websocket: WebSocket):
                 if not result.get("text"):
                     continue
 
-                chunk_id = f"chunk-{int(time.time() * 1000)}-{uuid4().hex[:8]}"
+                chunk_id = result.get("chunk_id") or f"chunk-{int(time.time() * 1000)}-{uuid4().hex[:8]}"
+                spk = result.get("speaker", last_speaker)
+                spk_id = result.get("speaker_id", last_speaker_id)
+                last_speaker = spk
+                last_speaker_id = spk_id
+
                 msg = {
-                    "text": result["text"], "is_final": True,
-                    "speaker": last_speaker, "speaker_id": last_speaker_id,
+                    "text": result["text"],
+                    "is_final": True,
+                    "speaker": spk,
+                    "speaker_id": spk_id,
                     "chunk_id": chunk_id,
                 }
-                # Diarize this finalized segment (buffer holds the audio that
-                # produced it, cleared right after so segments don't re-analyze
-                # the same samples).
-                with diarize_buf_lock:
-                    buf_bytes = bytes(diarize_buf)
-                    diarize_buf.clear()
-                if len(buf_bytes) >= DIARIZE_MIN_BYTES:
-                    try:
-                        samples = np.frombuffer(buf_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-                        speaker_info = await loop.run_in_executor(
-                            None, diarizer.identify_speaker_from_samples, samples, 16000
-                        )
-                        msg["speaker"] = speaker_info.get("speaker", last_speaker)
-                        msg["speaker_id"] = speaker_info.get("speaker_id", last_speaker_id)
-                        last_speaker = msg["speaker"]
-                        last_speaker_id = msg["speaker_id"]
-                    except Exception as e:
-                        log.warning("[ws:local] diarize error: %s", e)
+                if "start_ms" in result:
+                    msg["start_ms"] = result["start_ms"]
+                if "end_ms" in result:
+                    msg["end_ms"] = result["end_ms"]
 
                 await websocket.send_json(msg)
                 last_final_chunk_id = chunk_id
@@ -789,14 +771,13 @@ async def local_stream_ws(websocket: WebSocket):
                 break
             if "bytes" in data:
                 audio_bytes = data["bytes"]
-                streamer.feed_audio(audio_bytes)
-                with diarize_buf_lock:
-                    diarize_buf.extend(audio_bytes)
+                tracker.feed(audio_bytes)
                 if archive_fh is not None:
                     try:
                         archive_fh.write(audio_bytes)
                     except Exception as e:
                         log.warning("[ws:local-stream] archive write failed: %s", e)
+                streamer.feed_audio(audio_bytes)
             elif "text" in data:
                 txt = data["text"]
                 if txt == "STOP":
@@ -807,6 +788,7 @@ async def local_stream_ws(websocket: WebSocket):
     except WebSocketDisconnect:
         pass
     finally:
+        tracker.finish()
         streamer.stop()
         result_thread.join(timeout=5)
         try:

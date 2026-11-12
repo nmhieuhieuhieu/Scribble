@@ -1,4 +1,4 @@
-/* Scribble — Complete CSS */
+/* TPBank Voicebot — Complete CSS */
 @import "tailwindcss";
 
 /* Tailwind v4: dark: variant follows our data-theme attribute (not the
@@ -50,7 +50,9 @@
 
   --bg: var(--white);
   --bg-sub: var(--bg-sub);
-  --bg-app: linear-gradient(135deg, #f8fafc 0%, #f0f4ff 50%, #faf5ff 100%);
+  --bg-app:
+    radial-gradient(circle 800px at 25% 20%, rgba(245, 208, 254, 0.45) 0%, rgba(233, 213, 255, 0.25) 50%, transparent 75%),
+    linear-gradient(135deg, #faf5ff 0%, #f3e8ff 35%, #e9d5ff 70%, #ddd6fe 100%);
   --text: var(--gray-900);
   --text-secondary: var(--gray-500);
   --text-muted: var(--gray-400);
@@ -188,7 +190,9 @@
   --surface: #1c1f28;
   --bg: #0d0e11;
   --bg-sub: #12141a;
-  --bg-app: #0d0e11;
+  --bg-app:
+    radial-gradient(circle 800px at 25% 20%, rgba(245, 208, 254, 0.45) 0%, rgba(233, 213, 255, 0.25) 50%, transparent 75%),
+    linear-gradient(135deg, #faf5ff 0%, #f3e8ff 35%, #e9d5ff 70%, #ddd6fe 100%);
   --bg-elevated: #1e212b;
   --text: #f3f4f6;
   --text-secondary: #9ca3af;
@@ -449,36 +453,183 @@ body.electron-app .sub-tabs {
   flex-direction: column;
   min-width: 0;
   height: 100vh;
+  position: relative;
+  background: var(--bg-app);
+  overflow: hidden;
 }
 
-/* ─── Top Navigation ─── */
+.main::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    radial-gradient(circle at 0% 0%, rgba(244, 63, 94, 0.06) 1.5px, transparent 1.5px);
+  background-size: 32px 32px, 64px 64px;
+  background-position: 0 0, 24px 24px;
+  opacity: 0.6;
+}
+
+/* ─── Top Navigation (TPBank Cosmic Purple Theme) ─── */
 .topnav {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 5px 16px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 8px 24px;
+  min-height: 48px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 4px 24px rgba(25, 4, 45, 0.45);
   flex-shrink: 0;
   /* Stay above modal overlays (e.g. upload modal z-index:200) so the window
      drag region keeps working while a modal/upload is in progress. */
   position: relative;
   z-index: 1000;
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  /* Make the topbar a window-drag handle (Tauri webview honors the same
-     CSS Electron uses). user-select: none stops the brand/version text from
-     being highlighted when the user click-drags to move the window. */
+  background: rgba(38, 7, 65, 0.72);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   -webkit-app-region: drag;
   app-region: drag;
   -webkit-user-select: none;
   user-select: none;
   cursor: default;
+  color: #ffffff;
 }
 
 [data-theme="dark"] .topnav {
-  background: rgba(17, 17, 19, 0.82);
-  border-bottom-color: rgba(255, 255, 255, 0.08);
+  background: rgba(25, 4, 45, 0.85);
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+.topnav .brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topnav .brand-tpb {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.topnav .brand-tpb .tp-part,
+.topnav .brand-tpb .bank-part {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+.topnav .brand-tpb-icon {
+  width: 22px !important;
+  height: 22px !important;
+  filter: none;
+}
+
+.topnav .app-version {
+  color: rgba(255, 255, 255, 0.7) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.7) !important;
+  background: rgba(255, 255, 255, 0.12);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.topnav-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topnav .icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 150ms ease;
+  cursor: pointer;
+}
+
+.topnav .icon-btn:hover:not(:disabled) {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.26);
+  border-color: rgba(255, 255, 255, 0.38);
+}
+
+.topnav .lang-toggle {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 150ms ease;
+  cursor: pointer;
+}
+
+.topnav .lang-toggle:hover {
+  background: rgba(255, 255, 255, 0.26);
+  border-color: rgba(255, 255, 255, 0.38);
+  color: #ffffff;
+}
+
+.topnav .backend-status-chip {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  backdrop-filter: blur(6px);
+}
+
+.topnav .backend-status-chip.online {
+  background: rgba(0, 0, 0, 0.22);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+.topnav .backend-status-chip .status-dot.online {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.8);
+  width: 7px;
+  height: 7px;
+}
+
+.topnav .backend-status-chip.offline {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #fee2e2;
+}
+
+.topnav .backend-status-chip.starting {
+  background: rgba(59, 130, 246, 0.22);
+  border-color: rgba(96, 165, 250, 0.45);
+  color: #dbeafe;
+}
+
+.topnav .backend-status-chip.network-offline {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: rgba(251, 191, 36, 0.45);
+  color: #fef3c7;
 }
 
 [data-theme="dark"] .audio-player {
@@ -662,20 +813,50 @@ body.electron-app .sub-tabs {
 .brand {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.95rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  gap: 7px;
+  font-size: 1rem;
+  letter-spacing: -0.02em;
   color: var(--text);
-  background: linear-gradient(135deg, var(--gray-900), var(--indigo-600));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+}
+
+.brand-tpb {
+  display: inline-flex;
+  align-items: center;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-size: 1.05rem;
+}
+
+.brand-tpb .tp-part {
+  color: #591C82;
+  -webkit-text-fill-color: #591C82;
+}
+
+.brand-tpb .bank-part {
+  color: #F58220;
+  -webkit-text-fill-color: #F58220;
+}
+
+.brand-tpb-icon {
+  width: 20px !important;
+  height: 20px !important;
+  flex-shrink: 0;
+  filter: drop-shadow(0 1px 2px rgba(89, 28, 130, 0.25));
+}
+
+[data-theme="dark"] .brand-tpb .tp-part {
+  color: #c084fc;
+  -webkit-text-fill-color: #c084fc;
+}
+
+[data-theme="dark"] .brand-tpb .bank-part {
+  color: #fb923c;
+  -webkit-text-fill-color: #fb923c;
 }
 
 .brand svg {
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
 }
 
 .app-version {
@@ -730,7 +911,7 @@ body.electron-app .sub-tabs {
 .view {
   display: none;
   padding: 24px;
-  max-width: 860px;
+  max-width: 1140px;
   margin: 0 auto;
   width: 100%;
 }
@@ -758,7 +939,10 @@ body.electron-app .sub-tabs {
 .view.active:not(.detail-view) {
   display: flex;
   flex-direction: column;
-  padding: 24px 24px 0;
+  padding: 28px 40px 0;
+  max-width: 1140px;
+  margin: 0 auto;
+  width: 100%;
   height: 100%;
   min-height: 0;
 }
@@ -964,6 +1148,8 @@ body.electron-app .sub-tabs {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   min-height: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .tab-content.no-scroll {
@@ -974,7 +1160,7 @@ body.electron-app .sub-tabs {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
   flex-wrap: wrap;
   gap: 12px;
 }
@@ -994,31 +1180,37 @@ body.electron-app .sub-tabs {
 }
 
 .pane-title {
-  font-size: 1.05rem;
+  font-size: 1.35rem;
   font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--text);
+  letter-spacing: -0.015em;
+  color: #2b0548;
+}
+
+[data-theme="dark"] .pane-title {
+  color: #2b0548;
 }
 
 .pane-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
 /* ─── Action Button ─── */
 .action-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 16px;
-  border: 1px solid var(--border);
-  background: var(--white);
+  gap: 7px;
+  padding: 8px 20px;
+  border: 1px solid rgba(126, 34, 206, 0.22);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border-radius: var(--radius-full);
   font-family: var(--font);
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   font-weight: 600;
-  color: var(--gray-700);
+  color: #2b0548;
   cursor: pointer;
   transition:
     background-color var(--duration-quick) var(--ease-smooth-out),
@@ -1027,27 +1219,42 @@ body.electron-app .sub-tabs {
     box-shadow var(--duration-quick) var(--ease-smooth-out),
     transform var(--duration-quick) var(--ease-smooth-out);
   white-space: nowrap;
-  box-shadow: var(--shadow-xs);
+  box-shadow: 0 2px 10px rgba(76, 29, 149, 0.08);
 }
 
-.action-btn:hover {
-  background: var(--bg-sub);
-  border-color: var(--gray-300);
-  box-shadow: var(--shadow-sm);
+.action-btn:hover:not(:disabled) {
+  background: #ffffff;
+  border-color: rgba(126, 34, 206, 0.45);
+  box-shadow: 0 4px 16px rgba(76, 29, 149, 0.16);
   transform: translateY(-1px);
+  color: #2b0548;
+}
+
+[data-theme="dark"] .action-btn {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(126, 34, 206, 0.22);
+  color: #2b0548;
+  box-shadow: 0 2px 10px rgba(76, 29, 149, 0.08);
+}
+
+[data-theme="dark"] .action-btn:hover:not(:disabled) {
+  background: #ffffff;
+  border-color: rgba(126, 34, 206, 0.45);
 }
 
 .action-btn.primary {
-  background: var(--primary);
-  color: var(--primary-contrast, #ffffff);
-  border-color: transparent;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.2);
+  background: linear-gradient(90deg, #ec4899 0%, #f43f5e 40%, #ea580c 100%);
+  color: #ffffff;
+  font-weight: 600;
+  padding: 8px 22px;
+  border: none;
+  box-shadow: 0 4px 18px rgba(236, 72, 153, 0.55), 0 2px 8px rgba(234, 88, 12, 0.35);
 }
 
-.action-btn.primary:hover {
-  background: var(--primary-hover);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.25);
+.action-btn.primary:hover:not(:disabled) {
   transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(236, 72, 153, 0.7), 0 3px 10px rgba(234, 88, 12, 0.45);
+  filter: brightness(1.08);
 }
 
 .action-btn.danger {
@@ -1430,11 +1637,23 @@ body.electron-app .sub-tabs {
 }
 
 .transcript-item {
-  padding: 12px 14px;
+  padding: 16px 20px;
   border-bottom: none;
   animation: fadeSlide 300ms var(--ease);
-  border-radius: var(--radius-sm);
-  transition: background 150ms var(--ease);
+  border-radius: var(--radius-md);
+  transition: all 150ms var(--ease);
+  background: rgba(24, 3, 40, 0.65);
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  margin-bottom: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.transcript-item:hover {
+  background: rgba(36, 6, 60, 0.78);
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 /* v1.2.14: scroll-triggered auto-load sentinel. Shows at top of the
@@ -1611,12 +1830,14 @@ body.electron-app .sub-tabs {
   transition: width 200ms ease;
 }
 
-.transcript-item:hover {
-  background: rgba(0, 0, 0, 0.02);
-}
-
 .detail-view .transcript-item {
-  padding: 10px 14px;
+  padding: 16px 20px;
+  background: rgba(24, 3, 40, 0.65);
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  margin-bottom: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 @keyframes fadeSlide {
@@ -1636,15 +1857,17 @@ body.electron-app .sub-tabs {
 .transcript-time {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 0.72rem;
-  color: var(--text-muted);
-  margin-bottom: 4px;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.82);
+  margin-bottom: 8px;
   font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 .detail-view .transcript-time {
-  margin-bottom: 2px;
+  margin-bottom: 8px;
 }
 
 .transcript-time svg {
@@ -1653,14 +1876,22 @@ body.electron-app .sub-tabs {
 }
 
 .transcript-text {
-  font-size: 0.95rem;
-  line-height: 1.6;
-  color: var(--text);
+  font-size: 1.25rem !important;
+  line-height: 1.75 !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.75), 0 0 12px rgba(255, 255, 255, 0.15);
+  font-weight: 500;
+  letter-spacing: 0.012em;
 }
 
 .detail-view .transcript-text {
-  font-size: 0.92rem;
-  line-height: 1.5;
+  font-size: 1.25rem !important;
+  line-height: 1.75 !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.75), 0 0 12px rgba(255, 255, 255, 0.15);
+  font-weight: 500;
 }
 
 .transcript-item.live {
@@ -1889,11 +2120,14 @@ body.electron-app .sub-tabs {
 
 /* ─── Minutes Body ─── */
 .minutes-body {
-  font-size: 0.95rem;
-  line-height: 1.8;
+  font-size: 1.08rem !important;
+  line-height: 1.85 !important;
   flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 
 .minutes-body h1,
@@ -1901,7 +2135,9 @@ body.electron-app .sub-tabs {
 .minutes-body h3 {
   font-weight: 700;
   margin: 20px 0 8px;
-  color: var(--text);
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.65);
 }
 
 .minutes-body h1:first-child,
@@ -1996,7 +2232,7 @@ body.electron-app .sub-tabs {
   position: relative;
   z-index: 1;
   padding: 16px 20px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: var(--radius-md);
   transition:
     border-color var(--duration-quick) var(--ease-smooth-out),
@@ -2007,13 +2243,16 @@ body.electron-app .sub-tabs {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  background: var(--white);
-  box-shadow: var(--shadow-card);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 4px 20px rgba(25, 4, 45, 0.15);
 }
 
 .meeting-card:hover {
-  border-color: var(--gray-300);
-  box-shadow: var(--shadow-card-hover);
+  border-color: rgba(255, 255, 255, 0.65);
+  box-shadow: 0 8px 30px rgba(25, 4, 45, 0.25);
+  background: rgba(255, 255, 255, 0.98);
   transform: translateY(-1px);
 }
 
@@ -3011,10 +3250,7 @@ body.electron-app .sub-tabs {
 }
 
 .settings-panel {
-  /* Wider panel + 2-col grid inside sections = no scrolling on typical
-     laptop screens. On narrow windows (< 720px) the grid collapses to
-     a single column via the auto-fit minmax() below. */
-  width: 760px;
+  width: clamp(380px, 34vw, 500px);
   max-width: 100vw;
   height: 100vh;
   background: var(--bg);
@@ -3608,6 +3844,7 @@ body.electron-app .sub-tabs {
 @media (max-width: 600px) {
   .settings-panel {
     width: 100vw;
+    min-width: 0;
   }
 }
 
@@ -4656,17 +4893,20 @@ body.electron-app .draft-recovery-banner {
 
 /* Base translation style: quiet subtitle under the source text. */
 .translation-text {
-  font-size: 0.85rem;
-  color: #64748b;
-  line-height: 1.55;
+  font-size: 1.05rem !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.92) !important;
+  line-height: 1.65;
   background: transparent;
   border: none;
   padding: 0;
-  margin-top: 2px;
+  margin-top: 4px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
 }
 
 [data-theme="dark"] .translation-text {
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.92) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.92) !important;
 }
 
 /* ─── Translation Text ─── */
@@ -4793,14 +5033,18 @@ body.electron-app .draft-recovery-banner {
 .speaker-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 3px 10px;
+  gap: 5px;
+  font-size: 0.78rem !important;
+  font-weight: 700 !important;
+  padding: 3px 12px !important;
   border-radius: var(--radius-full, 9999px);
-  background: color-mix(in srgb, var(--speaker-color, #6366f1) 12%, transparent);
-  color: var(--speaker-color, #6366f1);
-  letter-spacing: 0.02em;
+  background: rgba(255, 255, 255, 0.22) !important;
+  border: 1px solid rgba(255, 255, 255, 0.38) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  letter-spacing: 0.03em;
   margin-bottom: 2px;
   white-space: nowrap;
   line-height: 1.4;
@@ -4974,26 +5218,32 @@ body.electron-app .draft-recovery-banner {
 .meetings-search-icon {
   position: absolute;
   left: 12px;
-  color: var(--text-muted);
+  color: rgba(255, 255, 255, 0.85);
   pointer-events: none;
 }
 
 .meetings-search-input {
   width: 100%;
   padding: 9px 36px 9px 36px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.35);
   border-radius: var(--radius-full);
-  background: var(--bg);
+  background: rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   font-family: var(--font);
   font-size: 0.85rem;
-  color: var(--text);
+  color: #ffffff;
   transition: border-color 200ms var(--ease), box-shadow 200ms var(--ease);
   outline: none;
 }
 
+.meetings-search-input::placeholder {
+  color: rgba(255, 255, 255, 0.75);
+}
+
 .meetings-search-input:focus {
-  border-color: var(--indigo-500);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  border-color: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.25);
 }
 
 .meetings-search-input::-webkit-search-cancel-button {
@@ -5009,20 +5259,21 @@ body.electron-app .draft-recovery-banner {
   align-items: center;
   justify-content: center;
   border: none;
-  background: var(--border);
+  background: rgba(255, 255, 255, 0.3);
   border-radius: 50%;
-  color: var(--gray-600);
+  color: #ffffff;
   cursor: pointer;
   transition: background 150ms;
 }
 
 .meetings-search-clear:hover {
-  background: var(--gray-300);
+  background: rgba(255, 255, 255, 0.5);
 }
 
 .meetings-count {
   font-size: 0.78rem;
-  color: var(--text-muted);
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
   white-space: nowrap;
   font-weight: 500;
 }
@@ -5097,6 +5348,113 @@ body.electron-app .draft-recovery-banner {
   text-align: center;
   padding: 80px 16px;
   line-height: 1.6;
+}
+
+/* ─── TPBank Empty State & Illustration ─── */
+.list-empty.empty-state-tpbank {
+  padding: 50px 16px 80px;
+  animation: emptyFadeIn 400ms var(--ease-smooth-out);
+}
+
+@keyframes emptyFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.empty-illustration-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 22px;
+}
+
+.empty-illustration-svg {
+  width: 230px;
+  height: 185px;
+  max-width: 100%;
+}
+
+.empty-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #2b0548;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+}
+
+[data-theme="dark"] .empty-title {
+  color: #2b0548;
+}
+
+.empty-subtitle {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #6b21a8;
+  margin: 0;
+  line-height: 1.4;
+}
+
+[data-theme="dark"] .empty-subtitle {
+  color: #6b21a8;
+}
+
+/* ─── Ambient Decorative Sparkle ─── */
+.bg-sparkle-decor {
+  position: fixed;
+  bottom: 44px;
+  right: 54px;
+  pointer-events: none;
+  opacity: 0.85;
+  z-index: 1;
+  filter: drop-shadow(0 0 10px rgba(236, 72, 153, 0.7));
+  transition: opacity 300ms ease;
+}
+
+[data-theme="dark"] .bg-sparkle-decor {
+  opacity: 0.85;
+}
+
+/* ─── Galaxy & Soundwave Cosmic Background ─── */
+.galaxy-soundwave-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.galaxy-soundwave-canvas {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* ── Audio Equalizer Bars Animation ── */
+.eq-bar {
+  animation: eqPulse 1.6s ease-in-out infinite alternate;
+  transform-origin: bottom;
+}
+.eq-1 { animation-delay: 0.1s; animation-duration: 1.2s; }
+.eq-2 { animation-delay: 0.3s; animation-duration: 1.5s; }
+.eq-3 { animation-delay: 0.05s; animation-duration: 1.1s; }
+.eq-4 { animation-delay: 0.4s; animation-duration: 1.7s; }
+.eq-5 { animation-delay: 0.2s; animation-duration: 1.3s; }
+.eq-6 { animation-delay: 0.5s; animation-duration: 1.4s; }
+
+@keyframes eqPulse {
+  0% { transform: scaleY(0.5); opacity: 0.3; }
+  50% { transform: scaleY(1.3); opacity: 0.8; }
+  100% { transform: scaleY(0.7); opacity: 0.45; }
 }
 
 /* ─── LLM Provider Grid ─── */
@@ -6189,10 +6547,7 @@ mark.transcript-hl {
 }
 
 /* ─── Dark theme: comprehensive surface & contrast system ─── */
-[data-theme="dark"] .topnav {
-  background: rgba(13, 14, 17, 0.84);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-}
+/* [data-theme="dark"] .topnav handled in TPBank theme */
 [data-theme="dark"] .brand {
   background: linear-gradient(135deg, #ffffff 0%, #a5b4fc 100%);
   -webkit-background-clip: text;
@@ -6320,17 +6675,19 @@ mark.transcript-hl {
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
 }
 [data-theme="dark"] .transcript-item:hover {
-  background: rgba(255, 255, 255, 0.025);
+  background: rgba(36, 6, 60, 0.78);
+  border-color: rgba(255, 255, 255, 0.4);
 }
 [data-theme="dark"] .transcript-item.live {
-  background: linear-gradient(90deg, rgba(239, 68, 68, 0.1), transparent);
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.2), rgba(24, 3, 40, 0.75));
 }
 [data-theme="dark"] .transcript-item.playing {
-  background: rgba(99, 102, 241, 0.12);
+  background: rgba(45, 10, 75, 0.78);
+  border-color: rgba(236, 72, 153, 0.65);
 }
 [data-theme="dark"] .sentence-translation,
 [data-theme="dark"] .translation-text {
-  color: #93c5fd;
+  color: rgba(255, 255, 255, 0.92) !important;
 }
 [data-theme="dark"] .card-delete-btn:hover,
 [data-theme="dark"] .t-delete-btn:hover { background: rgba(239, 68, 68, 0.14); }

@@ -29,6 +29,8 @@ import {
   Play,
   Plus,
   Search,
+  Settings,
+  Sliders,
   SlidersHorizontal,
   Square,
   Sun,
@@ -42,7 +44,7 @@ import {
 } from 'lucide-react';
 
 /**
- * Scribble icon set — powered by Lucide Icons (https://lucide.dev/icons/).
+ * TPBank Voicebot icon set — powered by Lucide Icons (https://lucide.dev/icons/).
  */
 export interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'width' | 'height'> {
   size?: number;
@@ -74,6 +76,8 @@ export const IconSpeaker = wrapLucide(User);
 
 // ── Navigation & chrome ────────────────────────────────────────────
 export const IconSettings = wrapLucide(SlidersHorizontal);
+export const IconGear = wrapLucide(Settings);
+export const IconSliders = wrapLucide(Sliders);
 export const IconSun = wrapLucide(Sun);
 export const IconMoon = wrapLucide(Moon);
 export const IconClose = wrapLucide(X);
@@ -110,3 +114,31 @@ export const IconErrorCircle = wrapLucide(CircleX);
 export const IconCheckCircle = wrapLucide(CircleCheck);
 export const IconWifiOff = wrapLucide(WifiOff);
 export const IconSystem = wrapLucide(Monitor);
+
+export function IconTPBank({ size = 20, className = '', ...props }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      {...props}
+    >
+      <defs>
+        <linearGradient id="tpb-logo-orange-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#FFA028" />
+          <stop offset="55%" stopColor="#FF7A00" />
+          <stop offset="100%" stopColor="#E65100" />
+        </linearGradient>
+      </defs>
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M20 16.5C16.5 14.4 12 16.9 12 21V79C12 83.1 16.5 85.6 20 83.5L84.5 54.5C88.2 52.4 88.2 47.6 84.5 45.5L20 16.5ZM26 34.5L62 50L26 65.5V34.5Z"
+        fill="url(#tpb-logo-orange-gradient)"
+      />
+    </svg>
+  );
+}

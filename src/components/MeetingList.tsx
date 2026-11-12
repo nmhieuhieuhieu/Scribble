@@ -9,12 +9,12 @@ import {
     downloadMeetingMinutes,
     downloadTextFile,
 } from '../lib/api';
-import { IS_TAURI } from '../lib/sidecar';
 import { showConfirm } from './ConfirmDialog';
 import { useToast } from './Toast';
 import { UploadAudioModal } from './UploadAudioModal';
+import { MeetingEmptyIllustration } from './MeetingEmptyIllustration';
 import { t } from '../i18n';
-import { IconClose, IconDots, IconMic, IconPlus, IconSearch, IconUpload } from './icons/scribble-icons';
+import { IconClose, IconDots, IconPlus, IconSearch, IconUpload } from './icons/scribble-icons';
 
 export function MeetingList() {
     const { meetings, setMeetings, setCurrentView, setCurrentMeetingId, setDraftId, setActiveTab, lang, recording, backendOnline } = useAppStore();
@@ -321,23 +321,21 @@ export function MeetingList() {
             <div className="pane-header">
                 <h2 className="pane-title">{lang === 'vi' ? 'Lịch sử cuộc họp' : 'Meeting History'}</h2>
                 <div className="pane-actions">
-                    {IS_TAURI && (
-                        <button
-                            className="action-btn"
-                            onClick={openUploadModal}
-                            disabled={recording || !backendOnline}
-                            title={
-                                !backendOnline
-                                    ? (lang === 'vi' ? 'Đang khởi động — vui lòng chờ' : 'Starting up — please wait')
-                                    : recording
-                                        ? (lang === 'vi' ? 'Đang ghi âm — dừng trước khi upload' : 'Stop recording before uploading')
-                                        : (lang === 'vi' ? 'Upload file ghi âm có sẵn' : 'Upload an audio file')
-                            }
-                        >
-                            <IconUpload size={14} strokeWidth={2.25} />
-                            <span>{lang === 'vi' ? 'Tải file lên' : 'Upload file'}</span>
-                        </button>
-                    )}
+                    <button
+                        className="action-btn"
+                        onClick={openUploadModal}
+                        disabled={recording || !backendOnline}
+                        title={
+                            !backendOnline
+                                ? (lang === 'vi' ? 'Đang khởi động — vui lòng chờ' : 'Starting up — please wait')
+                                : recording
+                                    ? (lang === 'vi' ? 'Đang ghi âm — dừng trước khi upload' : 'Stop recording before uploading')
+                                    : (lang === 'vi' ? 'Upload file ghi âm có sẵn' : 'Upload an audio file')
+                        }
+                    >
+                        <IconUpload size={14} strokeWidth={2.25} />
+                        <span>{lang === 'vi' ? 'Tải file lên' : 'Upload file'}</span>
+                    </button>
                     {/* NOT gated on `backendOnline`: creating a meeting only
                         touches local state, so it works the instant the app
                         opens. Gating it made the button look dead for the
@@ -383,12 +381,14 @@ export function MeetingList() {
 
             <div className="meetings-grid">
                 {filteredMeetings.length === 0 && meetings.length === 0 ? (
-                    <div className="list-empty">
-                        <IconMic size={40} style={{ opacity: 0.3, marginBottom: 12 }} strokeWidth={1.17} />
-                        <div>{lang === 'vi' ? 'Chưa có cuộc họp nào' : 'No meetings yet'}</div>
-                        <div style={{ fontSize: '0.82rem', marginTop: 4, opacity: 0.6 }}>
+                    <div className="list-empty empty-state-tpbank">
+                        <MeetingEmptyIllustration />
+                        <h3 className="empty-title">
+                            {lang === 'vi' ? 'Chưa có cuộc họp nào' : 'No meetings yet'}
+                        </h3>
+                        <p className="empty-subtitle">
                             {lang === 'vi' ? 'Nhấn "Cuộc họp mới" để bắt đầu' : 'Click "New Meeting" to get started'}
-                        </div>
+                        </p>
                     </div>
                 ) : filteredMeetings.length === 0 ? (
                     <div className="list-empty">
@@ -487,6 +487,21 @@ export function MeetingList() {
                 onClose={() => setUploadModalOpen(false)}
                 onMeetingReady={handleUploadReady}
             />
+
+            {/* Ambient decorative sparkle */}
+            <svg
+                className="bg-sparkle-decor"
+                width="34"
+                height="34"
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden="true"
+            >
+                <path
+                    d="M12 0C12 6.627 17.373 12 24 12C17.373 12 12 17.373 12 24C12 17.373 6.627 12 0 12C6.627 12 12 6.627 12 0Z"
+                    fill="rgba(196, 181, 253, 0.45)"
+                />
+            </svg>
         </section>
     );
 }

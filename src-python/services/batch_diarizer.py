@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
+from services.audio import read_wav_floats
 
 if TYPE_CHECKING:
     from diarize import SpeakerDiarizer
@@ -36,21 +37,25 @@ import os
 #
 # Earlier calibration (hynt ResNet34, distance 0.45) is superseded.
 # Override via DIARIZE_DISTANCE_THRESHOLD.
-# Must run on FINE (~2s) windows — 20s STT chunks blend speakers so every
+# Must run on FINE windows (~1s) — 20s STT chunks blend speakers so every
 # chunk looks alike.
-DEFAULT_DISTANCE_THRESHOLD = float(os.getenv("DIARIZE_DISTANCE_THRESHOLD", "0.55"))
-DEFAULT_MAX_SPEAKERS = 8
-
-# Fine-grained diarization windowing (independent of the 20s STT chunks).
-FINE_WINDOW_MS = int(os.getenv("DIARIZE_FINE_WINDOW_MS", "2000"))
-FINE_SILENCE_RMS = float(os.getenv("DIARIZE_FINE_SILENCE_RMS", "0.01"))
+from audio_config import (
+    FINE_WINDOW_MS,
+    FINE_HOP_MS,
+    FINE_SILENCE_RMS,
+    DEFAULT_MAX_SPEAKERS,
+    MERGE_MAX_GAP_MS,
+)
+DEFAULT_DISTANCE_THRESHOLD = float(os.getenv("DIARIZE_DISTANCE_THRESHOLD", "0.58"))
 
 
 def _load_wav_samples(path: Path) -> np.ndarray:
-    with wave.open(str(path), "rb") as w:
-        n = w.getnframes()
-        frames = w.readframes(n)
-    return np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+    try:
+        _, samples = read_wav_floats(path)
+        return samples
+    except Exception as exc:
+        log.warning("[batch-diarize] read_wav_floats failed for %s: %s", path, exc)
+        return np.zeros(0, dtype=np.float32)
 
 
 def _ensure_session(diarizer: "SpeakerDiarizer") -> bool:
@@ -281,13 +286,14 @@ def diarize_fine_windows(
     wav_path: Path,
     *,
     window_ms: int = FINE_WINDOW_MS,
+    hop_ms: int = FINE_HOP_MS,
     distance_threshold: float = DEFAULT_DISTANCE_THRESHOLD,
     max_speakers: int = DEFAULT_MAX_SPEAKERS,
     silence_rms: float = FINE_SILENCE_RMS,
 ) -> list[tuple[int, int, int]]:
     """Fine-grained diarization timeline for a whole normalized WAV.
 
-    Slices the audio into non-overlapping ~`window_ms` windows (default 2s),
+    Slices the audio into windows of length `window_ms` with step `hop_ms`,
     embeds each speech window, clusters them, and returns a timeline
     of (start_ms, end_ms, speaker_id). Fine windows are single-speaker far more
     often than the 20s STT chunks (which blend speakers and collapse to one
@@ -301,12 +307,13 @@ def diarize_fine_windows(
     samples = _load_wav_samples(wav_path)
     sr = 16000
     win = int(window_ms / 1000.0 * sr)
+    hop = int(hop_ms / 1000.0 * sr) if hop_ms > 0 else win
     if win <= 0 or len(samples) < win:
         return []
 
     embeddings: list[tuple[int, np.ndarray]] = []
     spans: list[tuple[int, int]] = []
-    for start in range(0, len(samples) - win + 1, win):
+    for start in range(0, len(samples) - win + 1, hop):
         seg = samples[start:start + win]
         if float(np.sqrt(np.mean(seg ** 2))) < silence_rms:
             continue  # skip near-silence so it doesn't pollute clustering
@@ -372,3 +379,89 @@ def chunk_speaker_map_from_timeline(
             seen[raw] = len(seen)
         result[c_idx] = seen[raw]
     return result
+
+
+def merge_consecutive_speaker_segments(
+    parts: list[dict],
+    max_gap_ms: int = MERGE_MAX_GAP_MS,
+) -> list[dict]:
+    """Merge consecutive segments belonging to the same speaker.
+
+    Implements Decision B:
+      - Only merges if current.speaker_id == previous.speaker_id AND gap <= max_gap_ms (1.5s).
+      - If gap > max_gap_ms, keeps as separate turns so pauses are clearly visible.
+      - Preserves original raw sub-chunks in 'segments' for full traceability.
+    """
+    if not parts:
+        return []
+
+    merged: list[dict] = []
+    for p in parts:
+        text = (p.get("text") or "").strip()
+        if not text:
+            continue
+
+        raw_spk = p.get("speakerId") if p.get("speakerId") is not None else p.get("speaker_id", 0)
+        try:
+            spk_id = int(raw_spk)
+        except (ValueError, TypeError):
+            spk_id = 0
+
+        try:
+            start_ms = int(float(p.get("startTime", 0)) * 1000)
+        except (ValueError, TypeError):
+            start_ms = int(p.get("start_ms", 0))
+
+        try:
+            end_ms = int(float(p.get("endTime", 0)) * 1000)
+        except (ValueError, TypeError):
+            end_ms = int(p.get("end_ms", 0))
+
+        chunk_id = str(p.get("chunkId") or "")
+        chunk_ids = list(p.get("chunkIds") or ([chunk_id] if chunk_id else []))
+        chunk_data = dict(p.get("chunkData") or ({chunk_id: text} if chunk_id else {}))
+        segs = list(p.get("segments") or [{
+            "chunk_id": chunk_id,
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+            "text": text,
+        }])
+
+        if merged and int(merged[-1].get("speakerId", -1)) == spk_id:
+            last = merged[-1]
+            try:
+                last_end_ms = int(float(last.get("endTime", 0)) * 1000)
+            except (ValueError, TypeError):
+                last_end_ms = int(last.get("end_ms", 0))
+
+            gap = start_ms - last_end_ms
+            if gap <= max_gap_ms:
+                # Merge into last turn
+                last["text"] = f"{last['text']} {text}".strip()
+                last_max_end = max(last_end_ms, end_ms)
+                last["endTime"] = f"{last_max_end / 1000.0:.2f}"
+                for cid in chunk_ids:
+                    if cid and cid not in last["chunkIds"]:
+                        last["chunkIds"].append(cid)
+                last["chunkData"].update(chunk_data)
+                last["segments"].extend(segs)
+                continue
+
+        # Start a new turn
+        speaker_name = p.get("speaker") or f"Speaker {spk_id + 1}"
+        merged.append({
+            "text": text,
+            "speaker": speaker_name,
+            "speakerId": spk_id,
+            "speaker_id": spk_id,
+            "chunkId": chunk_id or (chunk_ids[0] if chunk_ids else ""),
+            "chunkIds": chunk_ids,
+            "chunkData": chunk_data,
+            "startTime": f"{start_ms / 1000.0:.2f}",
+            "endTime": f"{end_ms / 1000.0:.2f}",
+            "segments": segs,
+            "timestamp": p.get("timestamp", ""),
+            "translation": p.get("translation", ""),
+        })
+
+    return merged

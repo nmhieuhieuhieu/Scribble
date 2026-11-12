@@ -31,8 +31,10 @@ src-tauri/target/
 audio_files/
 data/
 uploads/
+.voicescribe_data/
 *.wav
 *.mov
+*.parquet
 
 # App bundles
 *.dmg
